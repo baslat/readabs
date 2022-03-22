@@ -4,14 +4,10 @@
 \alias{tidy_api_data}
 \title{Tidy the raw data returned using the ABS' API}
 \usage{
-tidy_api_data(url, old_api)
+tidy_api_data(.data, structure_url)
 }
 \arguments{
-\item{url}{(char) The API URL used to query the data you want from the ABS.}
-
-\item{old_api}{(boolean) States whether the ABS' API uses the old (ABS.Stat)
-or new structure. If \code{old_api} == TRUE, then the API follows the old
-structure.}
+\item{structure_url}{(character; default = \code{NULL})}
 }
 \value{
 (tibble) Returns a tibble containing the ABS data you queried.

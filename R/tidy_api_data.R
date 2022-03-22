@@ -5,66 +5,95 @@
 #' (i.e. whether it follows the old or new structure, as stated in the
 #' \code{old_api} parameter).
 #'
-#' @param old_api (boolean) States whether the ABS' API uses the old (ABS.Stat)
-#'   or new structure. If \code{old_api} == TRUE, then the API follows the old
-#'   structure.
-#' @param url (char) The API URL used to query the data you want from the ABS.
+#' @inheritParams read_abs_api
 #'
 #' @return (tibble) Returns a tibble containing the ABS data you queried.
 #'
-tidy_api_data <- function(url, old_api) {
+tidy_api_data <- function(.data,
+                          structure_url) {
 
-  # Gets very nested list of raw data from ABS.
-  data_raw <- jsonlite::fromJSON(url)
+  # get an id
+  rd2 <- .data %>%
+    dplyr::mutate(row = dplyr::row_number())
 
-  # observations = A tibble with 2 columns: key (char) and value (num).
-  # key = A character consisting of integers separated by a colon (e.g.
-  # "0:3:2:1..."). The number of integers equals the number of dimensions the
-  # dataset has (i.e. region, year etc). The position of each integer tells us
-  # the dimension name and the value of each integer tells us the dimension
-  # member (these are found using the dimensions list below).
-  # value = The observation value.
-  observations <- data_raw %>%
-    purrr::when(old_api == FALSE ~ purrr::pluck(., "data"),
-                old_api == TRUE ~ .) %>%
-    purrr::pluck("dataSets", "observations") %>%
-    tidyr::pivot_longer(cols = tidyselect::everything(), names_to = "key")  %>%
-    dplyr::rowwise() %>% dplyr::mutate(value = .data$value[[1]]) %>%
-    dplyr::ungroup()
+  values <- rd2 %>%
+    dplyr::transmute(row,
+                     value = readr::parse_number(.data$ObsValue),
+                     time_period = .data$TIME_PERIOD)
 
-  # column_headers = A vector containing all variable names.
-  column_headers <- data_raw %>%
-    purrr::when(old_api == FALSE ~ purrr::pluck(., "data", "structure",
-                                                "dimensions", "observation",
-                                                "names")[[1]],
-                old_api == TRUE ~ purrr::pluck(., "structure", "dimensions",
-                                               "observation", "name"))
+  # get the structure info
+  structure_data <- readsdmx::read_sdmx(structure_url) %>%
+    tibble::as_tibble()
 
-  # dimensions = A list of data frames with each data frame containing all
-  # members (values) for a particular dimension (variable).
-  dimensions <- data_raw %>%
-    purrr::when(old_api == FALSE ~ purrr::pluck(., "data"),
-                old_api == TRUE ~ .) %>%
-    purrr::pluck("structure", "dimensions", "observation", "values") %>%
-    purrr::set_names(column_headers)
+  # oh fuck you ABS
+  # TODO CL_STATE in id is the colname REGION
+  # TODO TIME_PERIOD is a col name but not in the id column
+  # TODO FREQUENCY? just missing some times
 
-  # dataset = A tibble, which has a column for each dimension (variable) and a
-  # column for the observation value. The key corresponding to each observation
-  # in the observations tibble is split among the columns so each column
-  # has one integer. (Each integer corresponds to the position of the dimension
-  # member as found in the dimensions list.)
-  dataset <- observations %>%
-    tidyr::separate(col = .data$key, into = column_headers, sep = ":") %>%
-    dplyr::mutate(dplyr::across(.cols = tidyselect::vars_select_helpers$where(is.character),
-                                function(x)
-                                  as.numeric(x) + 1)) #add 1 to each integer to remove indices of 0
+  measures <- colnames(.data)
+  val_loc <- which(measures == "ObsValue")
 
-  # Replaces all integers with the name of the dimension member.
-  suppressMessages(dimensions %>%
-                     purrr::imap(api_join,
-                                 dataset = dataset) %>%
-                     purrr::reduce(dplyr::left_join) %>%
-                     dplyr::select(-.data$rowid) %>%
-                     dplyr::relocate(.data$value, .after = tidyselect::last_col()) %>%
-                     janitor::clean_names())
+  ## MANUALLY ADD IN STATE if REGION detected
+  got_region <- "REGION" %in% measures
+  # CHECK FOR STATE?
+  if (got_region) {
+    rlang::warn("There's a region column here (which is going to be renamed to state), lookout!")
+  }
+
+
+  # could pull the last bit from id
+  details <- structure_data %>%
+    # The ABS uses REGION as a column name but CL_STATE as the dictionary key
+    dplyr::mutate(
+      id = dplyr::case_when(
+        .data$id == "CL_STATE" ~ "REGION",
+        TRUE ~ .data$id)
+      ) %>%
+    dplyr::mutate(id = stringr::str_extract(.data$id,
+                                                  pattern = stringr::str_c(measures, collapse = "|"))) %>%
+
+    dplyr::filter(.data$id %in% measures) %>%
+    dplyr::select(-.data$agencyID,
+                  -.data$version,
+                  -.data$isFinal)
+
+  clean_up <- function(.data) {
+    .data %>%
+      dplyr::rename(!!.$id[[1]] := id_description,
+                    !!.$en[[1]] := en_description) %>%
+      dplyr::select(-en,
+                    -id)
+  }
+
+all_the_details <- details %>%
+    split(.$id) %>%
+    purrr::map(clean_up)
+
+
+
+mini_join <- function(.data,
+                      details,
+                      var) {
+  .data %>%
+    dplyr::select(row, !!var) %>%
+    dplyr::left_join(details) %>%
+    dplyr::select(-!!var)
+
+}
+
+# Using suppressMessages because of all the different joining_by messages in the
+# reduce
+suppressMessages(
+  purrr::imap(all_the_details,
+              .f = mini_join,
+              .data = rd2) %>%
+    purrr::reduce(inner_join) %>%
+    dplyr::inner_join(values) %>%
+    dplyr::select(-.data$row) %>%
+    janitor::clean_names() %>%
+    dplyr::relocate(.data$value,
+                    .before = val_loc)
+)
+
+
 }

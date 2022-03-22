@@ -1,33 +1,19 @@
-#'Get tidy data from ABS
+#' Get tidy data from ABS
 #'
-#'This function returns a tidy tibble of flat-view and JSON format data queried
-#'using the ABS' API URL. It first identifies whether the URL entered uses the
-#'ABS' old or new API URL structure. If the URL is super long, it's also passed
-#'through the \code{api_split_url} function, which splits up the large URL into
-#'a combination of smaller URLs to increase efficiency. The resulting URL/s
-#'is/are then passed through \code{tidy_api_data}, which returns a tidy tibble
-#'of your data.
+#' This function returns a tidy tibble of flat-view and JSON format data queried
+#' using the ABS' API URL. It first identifies whether the URL entered uses the
+#' ABS' old or new API URL structure. If the URL is super long, it's also passed
+#' through the \code{api_split_url} function, which splits up the large URL into
+#' a combination of smaller URLs to increase efficiency. The resulting URL/s
+#' is/are then passed through \code{tidy_api_data}, which returns a tidy tibble
+#' of your data.
 #'
-#'@param url (char) The API URL used to query the data you want from the ABS.
+#' @param query_url (character) the
+#' @param raw (logical; default = \code{FALSE})
+#' @param structure_url (character; default = \code{NULL})
 #'
-#'  Both the ABS.Stat URL structure and the new API URL structure (as outlined
-#'  on api.gov.au) are accepted. The following parameters would just need to be
-#'  included in the URLs to organise the data in the flat view and JSON format:
-#'  dimensionAtObservation=allDimensions (for the ABS.Stat SDMX-JSON API) and
-#'  format=jsondata&dimensionAtObservation=AllDimensions (for the new API).
-#'
-#'  Automatically generate the ABS.Stat URL:
-#'  Click on the dataset you want at \url{http://stat.data.abs.gov.au/}. Then
-#'  export the data as a "Developer API" and copy and paste the URL under the
-#'  "Data query:" heading. The "SDMX-JSON flavour:" should be checked as
-#'  "Flat format".
-#'
-#'  IMPORTANT: If the URL is larger than 4087 characters, the RStudio console
-#'  will NOT be able to take the string input. Therefore, first assign your URL
-#'  to a variable by using \code{abs_clipboard} (see first example).
-#'
-#'@return (tibble) Returns a tidy tibble containing the ABS data you queried.
-#'@export
+#' @return (tibble) Returns a tidy \code{tibble} containing the ABS data you queried.
+#' @export
 #'
 #' @examples
 #' \dontrun{
@@ -42,25 +28,65 @@
 #'   "&dimensionAtObservation=AllDimensions")
 #' tidy_data <- read_abs_api(old_url)
 #' tidy_data
-#'
-#' ### Get tidy ALC dataset using the new URL structure:
-#' new_url <- paste0("https://api.data.abs.gov.au/data/ALC/",
-#'   "all?startPeriod=2010&endPeriod=2016&format=jsondata",
-#'   "&dimensionAtObservation=AllDimensions")
-#' tidy_data <- read_abs_api(new_url)
-#' tidy_data
 #' }
-read_abs_api <- function(url) {
-  chars <- "/sdmx-json/" #only the ABS.Stat URL structure includes this
-  old_api <- grepl(chars, url)
+read_abs_api <- function(query_url,
+                         raw = FALSE,
+                         structure_url = NULL) {
 
-  #check for URLs with more than 1000 characters
-  long_url <- nchar(url) > 1000
-
-  if (long_url) {
-    api_split_url(url, old_api) %>%
-      purrr::map_dfr(tidy_api_data, old_api = old_api)
-  } else {
-    tidy_api_data(url = url, old_api = old_api)
+  raw_dat <- readsdmx::read_sdmx(query_url) %>%
+    tibble::as_tibble()
+  if (raw) {
+    return(raw_dat)
   }
+
+  structure_url <- structure_url %||% guess_structure_url(query_url)
+
+  cleaned <- tidy_api_data(.data = raw_dat,
+                           structure_url)
+
+  same_size <- all(dim(raw_dat) == dim(cleaned))
+  if (!same_size) {
+    rlang::warn("The cleaned data isn't the same shape as the raw data. This usually means that a value in the data dictionary doesn't exactly match a column name (e.g. dictionary uses 'state' and data column is 'region'), or the ABS left something out of the data dictionary (e.g. 'Frequency' is in the data but not the dictionary). Change the `raw` argument to `TRUE` and take a look at what's different.")
+  }
+
+  cleaned
 }
+
+#' Guess the structure URL for the API
+#'
+#' The structure URL will return information about how certain variables are
+#' encoded. This function can guess what it should be, given a query URL.
+#'
+#' @inheritParams read_abs_api
+#'
+#' @return a URL string
+guess_structure_url <- function(query_url) {
+
+  components <- urltools::url_parse(query_url)
+  # take the path, and the bit in between the /, and swap the , for /, and add dataflow
+  new_path <- components$path %>%
+    stringr::str_extract("(?<=/)(.*)(?=/)") %>%
+    stringr::str_replace_all(",", "/") %>%
+    paste0("dataflow/", .)
+
+  components$path <- new_path
+  components$parameter <- "references=all&detail=referencepartial"
+
+  urltools::url_compose(components)
+}
+
+
+
+structure_join <- function(.data,
+                           structure,
+                           measure) {
+  prep <- structure %>%
+    dplyr::filter(id == measure) %>%
+    dplyr::select(!!measure := id_description,
+                  !!.$en[[1]] := en_description)
+
+  .data %>%
+    dplyr::left_join(prep) %>%
+    dplyr::select(-!!measure)
+}
+

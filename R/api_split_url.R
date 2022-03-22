@@ -17,15 +17,12 @@
 #'   structure.
 #'
 #' @return (character) A character vector with the smaller URLs.
-api_split_url <- function(url, old_api) {
+api_split_url <- function(url) {
   url_structure <- unlist(strsplit(url, "/"))
 
-  if(old_api) {
-    key <- url_structure[7]
-  } else {
-    url_end <- url_structure[6]
-    key <- stringr::str_split(url_end, "\\?")[[1]][1]
-  }
+  url_end <- url_structure[6]
+  key <- stringr::str_split(url_end, "\\?")[[1]][1]
+
 
   #variables = character vector containing the all values (members) of each
   #variable (dimension)
@@ -38,16 +35,10 @@ api_split_url <- function(url, old_api) {
   key_elements <- expand.grid(var_batches)
 
   #extract the stem and end of URLs
-  if (old_api) {
-    stem <- paste0(url_structure[1], "//", url_structure[3], "/",
-                   url_structure[4], "/", url_structure[5], "/",
-                   url_structure[6], "/")
-    end <- paste0("/", url_structure[8])
-  } else {
-    stem <- paste0(url_structure[1], "//", url_structure[3], "/",
-                   url_structure[4], "/", url_structure[5], "/")
-    end <- paste0("?", stringr::str_split(url_end, "\\?")[[1]][2])
-  }
+  stem <- paste0(url_structure[1], "//", url_structure[3], "/",
+                 url_structure[4], "/", url_structure[5], "/")
+  end <- paste0("?", stringr::str_split(url_end, "\\?")[[1]][2])
+
 
   urls <- key_elements %>%
     #make one column consisting of the new smaller keys

@@ -8,8 +8,7 @@
 \description{
 \if{html}{\figure{logo.png}{options: align='right' alt='logo' width='120'}}
 
-Downloads, imports, and tidies time series data from the 
-    Australian Bureau of Statistics <https://www.abs.gov.au/>.
+Downloads, imports, and tidies time series data from the Australian Bureau of Statistics <https://www.abs.gov.au/>.
 }
 \seealso{
 Useful links:

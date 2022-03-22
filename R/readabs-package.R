@@ -15,4 +15,5 @@ NULL
 #
 #' @importFrom rlang .data
 #' @importFrom rlang :=
+#' @importFrom rlang %||%
 NULL

@@ -4,7 +4,7 @@
 \alias{api_split_url}
 \title{Splits one large API URL into smaller URLs}
 \usage{
-api_split_url(url, old_api)
+api_split_url(url)
 }
 \arguments{
 \item{url}{(char) The API URL used to query the data you want from the ABS.
