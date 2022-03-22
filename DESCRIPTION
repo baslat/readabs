@@ -33,7 +33,10 @@ Imports:
     jsonlite,
     stringr,
     tibble,
-    tidyselect
+    tidyselect,
+    readr,
+    readsdmx,
+    urltools
 URL: https://github.com/mattcowgill/readabs
 BugReports: https://github.com/mattcowgill/readabs/issues
 RoxygenNote: 7.1.2
