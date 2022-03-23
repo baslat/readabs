@@ -1,6 +1,12 @@
-# readabs (development version)
+# readabs 0.4.11.900
+* Bug fixes
 
-# readabs 0.4.9.90x
+# readabs 0.4.11
+* New options available in read_payrolls(). Thanks to @martintburgess.
+* Fixes to adapt to changes the ABS made to its time series spreadsheets without warning. Thanks to @Henry-DJPR.
+* Fix to ensure read_abs_local() works with .xlsx files as well as .xlsx. Thanks to @hamgamb.
+
+# readabs 0.4.10
 * "industry_wages" is no longer an option in read_payrolls() as it has been removed from the data
 * Bug fixes
 
