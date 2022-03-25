@@ -87,7 +87,7 @@ suppressMessages(
   purrr::imap(all_the_details,
               .f = mini_join,
               .data = rd2) %>%
-    purrr::reduce(inner_join) %>%
+    purrr::reduce(dplyr::inner_join) %>%
     dplyr::inner_join(values) %>%
     dplyr::select(-.data$row) %>%
     janitor::clean_names() %>%

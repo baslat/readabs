@@ -42,11 +42,13 @@ read_abs_api <- function(query_url,
   structure_url <- structure_url %||% guess_structure_url(query_url)
 
   cleaned <- tidy_api_data(.data = raw_dat,
-                           structure_url)
+                           structure_url = structure_url)
 
   same_size <- all(dim(raw_dat) == dim(cleaned))
   if (!same_size) {
-    rlang::warn("The cleaned data isn't the same shape as the raw data. This usually means that a value in the data dictionary doesn't exactly match a column name (e.g. dictionary uses 'state' and data column is 'region'), or the ABS left something out of the data dictionary (e.g. 'Frequency' is in the data but not the dictionary). Change the `raw` argument to `TRUE` and take a look at what's different.")
+    "The cleaned data isn't the same shape as the raw data. This usually means that a value in the data dictionary (i.e. what is returned by the `structure_url`) doesn't exactly match a column name (e.g. dictionary uses 'state' and data column is 'region'), or the ABS left something out of the data dictionary (e.g. 'Frequency' is in the data but not the dictionary). Change the `raw` argument to `TRUE` and take a look at what's different." %>%
+      stringr::str_wrap(80) %>%
+      rlang::warn()
   }
 
   cleaned
