@@ -4,14 +4,14 @@
 \alias{read_abs_api}
 \title{Get tidy data from ABS}
 \usage{
-read_abs_api(query_url, raw = FALSE, structure_url = NULL)
+read_abs_api(query_url, structure_url = NULL)
 }
 \arguments{
 \item{query_url}{(character) the}
 
-\item{raw}{(logical; default = \code{FALSE})}
-
 \item{structure_url}{(character; default = \code{NULL})}
+
+\item{raw}{(logical; default = \code{FALSE})}
 }
 \value{
 (tibble) Returns a tidy \code{tibble} containing the ABS data you queried.

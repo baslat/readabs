@@ -9,17 +9,22 @@
 #'
 #' @return (tibble) Returns a tibble containing the ABS data you queried.
 #'
-tidy_api_data <- function(.data,
-                          structure_url) {
+tidy_api_data <- function(
+  .data,
+  structure_url
+) {
 
   # get an id
   rd2 <- .data %>%
-    dplyr::mutate(row = dplyr::row_number())
+    dplyr::mutate(row = dplyr::row_number()) %>%
+      janitor::clean_names() %>%
+      dplyr::rename_with(.fn = ~ paste0(., "_code"))
 
   values <- rd2 %>%
-    dplyr::transmute(row,
-                     value = readr::parse_number(.data$ObsValue),
-                     time_period = .data$TIME_PERIOD)
+    dplyr::transmute(.data$row_code,
+      value_code = readr::parse_number(.data$obs_value_code),
+      time_period_code = .data$time_period_code
+    )
 
   # get the structure info
   structure_data <- readsdmx::read_sdmx(structure_url) %>%
@@ -33,12 +38,12 @@ tidy_api_data <- function(.data,
   measures <- colnames(.data)
   val_loc <- which(measures == "ObsValue")
 
-  ## MANUALLY ADD IN STATE if REGION detected
-  got_region <- "REGION" %in% measures
-  # CHECK FOR STATE?
-  if (got_region) {
-    rlang::warn("There's a region column here (which is going to be renamed to state), lookout!")
-  }
+  # ## MANUALLY ADD IN STATE if REGION detected
+  # got_region <- "REGION" %in% measures
+  # # CHECK FOR STATE?
+  # if (got_region) {
+  #   rlang::warn("There's a region column here (which is going to be renamed to state), lookout!")
+  # }
 
 
   # could pull the last bit from id
@@ -58,14 +63,28 @@ tidy_api_data <- function(.data,
                   -.data$isFinal)
 
   clean_up <- function(.data) {
-    .data %>%
+    clean_data <- .data %>%
       dplyr::rename(!!.$id[[1]] := id_description,
                     !!.$en[[1]] := en_description) %>%
-      dplyr::select(-en,
-                    -id)
+      dplyr::select(
+        -en,
+        -id
+      )
+
+      # make new name vector
+      new_names <- colnames(clean_data)[[2]] %>%
+        stringr::str_remove(pattern = "_code$") %>%
+        paste0(., c("_name", "_code"))
+
+
+      clean_data %>%
+        dplyr::rename_with(.fn = ~new_names)
+
   }
 
+
 all_the_details <- details %>%
+  dplyr::mutate(id = paste0(tolower(id), "_code")) %>%
     split(.$id) %>%
     purrr::map(clean_up)
 
@@ -75,7 +94,7 @@ mini_join <- function(.data,
                       details,
                       var) {
   .data %>%
-    dplyr::select(row, !!var) %>%
+    dplyr::select(.data$row_code, !!var) %>%
     dplyr::left_join(details) %>%
     dplyr::select(-!!var)
 
@@ -85,14 +104,23 @@ mini_join <- function(.data,
 # reduce
 suppressMessages(
   purrr::imap(all_the_details,
-              .f = mini_join,
-              .data = rd2) %>%
-    purrr::reduce(dplyr::inner_join) %>%
-    dplyr::inner_join(values) %>%
-    dplyr::select(-.data$row) %>%
-    janitor::clean_names() %>%
-    dplyr::relocate(.data$value,
-                    .before = val_loc)
+    .f = mini_join,
+    .data = rd2
+  ) %>%
+    purrr::reduce(
+      dplyr::inner_join,
+      by = "row_code"
+    ) %>%
+    dplyr::inner_join(rd2) %>%
+    dplyr::rename(
+      value = .data$obs_value_code,
+    ) %>%
+    dplyr::select(-.data$row_code) %>%
+    dplyr::select(sort(colnames(.))) %>%
+    dplyr::relocate(
+      .data$value,
+      .before = 1
+    )
 )
 
 
