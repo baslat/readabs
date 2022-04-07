@@ -14,79 +14,103 @@ tidy_api_data <- function(
   structure_url
 ) {
 
-  # get an id
-  rd2 <- .data %>%
+  # Clean the raw data names, and add an ID
+  rd <- .data %>%
     dplyr::mutate(row = dplyr::row_number()) %>%
-      janitor::clean_names() %>%
-      dplyr::rename_with(.fn = ~ paste0(., "_code"))
+    janitor::clean_names() %>%
+    # Need to rename region to state because the data dictionary uses region
+    dplyr::rename("state" = dplyr::contains("region"))
 
+  # Suffix the columns with '_code'
+  rd2 <- rd %>%
+    dplyr::rename_with(.fn = ~ paste0(., "_code"))
+
+  # Extract the values and row ids
   values <- rd2 %>%
-    dplyr::transmute(.data$row_code,
-      value_code = readr::parse_number(.data$obs_value_code),
-      time_period_code = .data$time_period_code
-    )
+    dplyr::transmute(
+      .data$row_code,
+      value_code = .data$obs_value_code)
 
   # get the structure info
-  structure_data <- readsdmx::read_sdmx(structure_url) %>%
-    tibble::as_tibble()
+  struc_raw <- rsdmx::readSDMX(structure_url)
 
-  # oh fuck you ABS
-  # TODO CL_STATE in id is the colname REGION
-  # TODO TIME_PERIOD is a col name but not in the id column
-  # TODO FREQUENCY? just missing some times
-
-  measures <- colnames(.data)
-  val_loc <- which(measures == "ObsValue")
-
-  # ## MANUALLY ADD IN STATE if REGION detected
-  # got_region <- "REGION" %in% measures
-  # # CHECK FOR STATE?
-  # if (got_region) {
-  #   rlang::warn("There's a region column here (which is going to be renamed to state), lookout!")
-  # }
+  # Bunch of convoluted work to tidy up the structure (Data Structure Definition (DSD))
+  codes_raw <- slot(struc_raw, "codelists")
+  codes <- sapply(slot(codes_raw, "codelists"), function(x) slot(x, "id")) #get list of codelists
 
 
-  # could pull the last bit from id
-  details <- structure_data %>%
-    # The ABS uses REGION as a column name but CL_STATE as the dictionary key
-    dplyr::mutate(
-      id = dplyr::case_when(
-        .data$id == "CL_STATE" ~ "REGION",
-        TRUE ~ .data$id)
-      ) %>%
-    dplyr::mutate(id = stringr::str_extract(.data$id,
-                                                  pattern = stringr::str_c(measures, collapse = "|"))) %>%
 
-    dplyr::filter(.data$id %in% measures) %>%
-    dplyr::select(-.data$agencyID,
-                  -.data$version,
-                  -.data$isFinal)
+  standardise_measure <- function(measure, all_measures) {
+    measure %>%
+      tolower() %>%
+      stringr::str_remove("CL_") %>%
+      stringr::str_extract(pattern = stringr::str_c(all_measures,
+                                                    collapse = "|"))
+  }
 
-  clean_up <- function(.data) {
-    clean_data <- .data %>%
-      dplyr::rename(!!.$id[[1]] := id_description,
-                    !!.$en[[1]] := en_description) %>%
+
+
+  tidy_codes <- function(code, structure_data, all_measures) {
+    clean_measure <- standardise_measure(code, all_measures = all_measures)
+    raw <- as.data.frame(slot(structure_data, "codelists"), codelistId = code)  %>% #get a codelist
+      dplyr::as_tibble()
+
+
+
+   names_descs_labels <- raw %>%
+      select(-id) %>%
+      colnames()
+
+   raw %>%
+      dplyr::mutate(full_label = dplyr::coalesce(!!!syms(names_descs_labels))) %>%
       dplyr::select(
-        -en,
-        -id
-      )
-
-      # make new name vector
-      new_names <- colnames(clean_data)[[2]] %>%
-        stringr::str_remove(pattern = "_code$") %>%
-        paste0(., c("_name", "_code"))
-
-
-      clean_data %>%
-        dplyr::rename_with(.fn = ~new_names)
+        id = id,
+        label = full_label,
+        notes = dplyr::contains("desc")) %>%
+     dplyr::mutate(code = clean_measure)
 
   }
 
 
+  # Still has the stupid region/state problem
+  all_measures <- colnames(rd)
+
+  details <- codes %>%
+    purrr::set_names() %>%
+    purrr::map_dfr(tidy_codes,
+                   structure_data = struc_raw,
+                   all_measures = all_measures) %>%
+    dplyr::filter(.data$code %in% all_measures)
+
+
+
+  clean_up_data_dict <- function(.data) {
+
+    new_names <- .data$code[[1]] %>%
+      paste0(c("_code", "_name", "_notes"))
+
+
+    clean <- .data %>%
+      dplyr::select(-.data$code) %>%
+      dplyr::rename_with(~new_names)
+
+
+    drop_desc <- sum(is.na(clean[[3]])) == nrow(clean)
+
+    if (drop_desc) {
+      clean <- dplyr::select(clean,
+                             -dplyr::contains("notes"))
+    }
+
+    clean
+  }
+
+
 all_the_details <- details %>%
-  dplyr::mutate(id = paste0(tolower(id), "_code")) %>%
-    split(.$id) %>%
-    purrr::map(clean_up)
+  dplyr::mutate(code = tolower(code)) %>%
+    split(.$code) %>%
+    purrr::map(clean_up_data_dict) %>%
+  purrr::set_names(~paste0(., "_code"))
 
 
 

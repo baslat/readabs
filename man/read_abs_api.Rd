@@ -2,41 +2,57 @@
 % Please edit documentation in R/read_abs_api.R
 \name{read_abs_api}
 \alias{read_abs_api}
-\title{Get tidy data from ABS}
+\title{Get tidy data from ABS' API}
 \usage{
-read_abs_api(query_url, structure_url = NULL)
+read_abs_api(
+  query_url,
+  structure_url = NULL,
+  verbose = TRUE,
+  check = TRUE,
+  batch_mode = FALSE
+)
 }
 \arguments{
-\item{query_url}{(character) the}
+\item{query_url}{(character) the 'Data query' URL from the 'Developer API'
+section from the \href{https://explore.data.abs.gov.au/}{ABS' API}. I'm not
+sure what the difference between 'Flat' and 'Time series' is, because even
+though the URLs are different they return the same data.}
 
-\item{structure_url}{(character; default = \code{NULL})}
+\item{structure_url}{(character; default = \code{NULL}) the 'Structure query'
+URL from the same place. This provides the information for the data
+dictionary. If \code{NULL} it will be guessed from \code{query_url}.}
 
-\item{raw}{(logical; default = \code{FALSE})}
+\item{verbose}{(logical; default = \code{TRUE}) print status update messages?}
+
+\item{check}{(logical; default = \code{TRUE}) check the URL can be queried?
+Some URLs are too long to be queried, so this can provide some advice on
+how to deal with them (at the expense of speed).}
 }
 \value{
-(tibble) Returns a tidy \code{tibble} containing the ABS data you queried.
+(\code{tibble}) Returns a tidy \code{tibble} containing the ABS data
+  you queried. Each \code{tibble} returns a column \code{value} along with a
+  series of other columns for the metadata (suffixed \code{_code},
+  \code{_name}, and \code{_notes}). Some metadata returns just one suffixed
+  column, others two, and others three (eg querying labour force data returns
+  \code{sex_code} and \code{sex_name}, but \code{age_code}, \code{age_name}
+  and \code{age_notes}. Generally, the \code{_code} column shows the encoded
+  value (eg \code{sex_code} might show a value of \code{3}), the \code{_name}
+  shows a human interpretable translation of \code{_code} (eg \code{sex_name}
+  would show \code{Persons}), and \code{_notes} is a bit of a mixed bag.
+  Sometimes it's missing, sometimes it's the same as \code{_name}, and
+  sometimes it's useful context.
 }
 \description{
-This function returns a tidy tibble of flat-view and JSON format data queried
-using the ABS' API URL. It first identifies whether the URL entered uses the
-ABS' old or new API URL structure. If the URL is super long, it's also passed
-through the \code{api_split_url} function, which splits up the large URL into
-a combination of smaller URLs to increase efficiency. The resulting URL/s
-is/are then passed through \code{tidy_api_data}, which returns a tidy tibble
-of your data.
+This function returns a tidy \code{tibble} of data queried from the
+\href{https://explore.data.abs.gov.au/}{ABS' API}. See the vignette for a
+detailed guide on how to use this to get monthly labour force data or
+download the last decade of Data by Region at SA2.
 }
 \examples{
 \dontrun{
-### Get tidy dataset from a large URL (4087+ characters):
-# First copy the URL
-url <- abs_clipboard()
-tidy_data <- read_abs_api(url)
+# Labour force data query URL, taken from ABS API site
+lf_url <- "https://api.data.abs.gov.au/data/ABS,LF,1.0.0/M9.3.1599.30+10+20.AUS.M?startPeriod=2021-01&dimensionAtObservation=AllDimensions"
 
-### Get tidy ALC dataset using the ABS.Stat structure:
-old_url <- paste0("http://stat.data.abs.gov.au/sdmx-json/data/ALC/",
- "all/ABS?startTime=2010&endTime=2016&detail=DataOnly",
-  "&dimensionAtObservation=AllDimensions")
-tidy_data <- read_abs_api(old_url)
-tidy_data
+lf <- read_abs_api(lf_url)
 }
 }

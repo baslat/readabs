@@ -7,7 +7,9 @@
 tidy_api_data(.data, structure_url)
 }
 \arguments{
-\item{structure_url}{(character; default = \code{NULL})}
+\item{structure_url}{(character; default = \code{NULL}) the 'Structure query'
+URL from the same place. This provides the information for the data
+dictionary. If \code{NULL} it will be guessed from \code{query_url}.}
 }
 \value{
 (tibble) Returns a tibble containing the ABS data you queried.
